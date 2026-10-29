@@ -81,12 +81,21 @@ Movement types: `TOP_UP`, `WITHDRAWAL`, `SENT`, `RECEIVED`.
    error is returned.
 4. Register the `SENT` and `RECEIVED` movements.
 
-## Link with the bank (Step D3, pending)
-Planned design, event driven (no REST):
-- A wallet can be associated with a debit card of the bank.
-- When associated, top-ups and payments move the balance of the card's
-  **primary account** instead of the wallet balance.
-- Topic: `yanki-events`.
+## Link with the bank
+Event driven, no REST:
+- debit-card-service publishes its cards to `debit-card-events`; yanki-service
+  keeps a local copy (`known_cards`).
+- `PUT /yanki/wallets/{phoneNumber}/debit-card` links a card. The card must exist
+  and its holder's document must match the wallet's document.
+- `DELETE /yanki/wallets/{phoneNumber}/debit-card` unlinks it (ADMIN).
+- If the card is deleted in the bank, the wallet is unlinked automatically.
+
+### Not implemented
+Moving the balance of the card's primary account when topping up or withdrawing
+from a linked wallet. Planned design: yanki-service would publish a request to
+`yanki-events`, transaction-service would deposit or withdraw on the primary
+account (same pattern as debit payments), and publish the result. Today top-ups,
+withdrawals and payments between wallets only change the wallet balance.
 
 ## Documentation
 - OpenAPI contract: `docs/openapi.yaml`
@@ -101,7 +110,7 @@ Planned design, event driven (no REST):
 - The IMEI is stored and validated only by format (15 digits); it is not
   checked against the device.
 - Wallets are not linked to bank customers, by design.
-- The debit card association is pending (see above).
+- The primary-account top-up/withdrawal is pending (see above).
 
 ## Tests
 `mvn clean test`. Coverage report: `target/site/jacoco/index.html`.
