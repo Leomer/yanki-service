@@ -4,7 +4,9 @@ import com.bank.yanki.dto.WalletDto;
 import com.bank.yanki.exception.BusinessException;
 import com.bank.yanki.exception.NotFoundException;
 import com.bank.yanki.mapper.WalletMapper;
+import com.bank.yanki.model.KnownCard;
 import com.bank.yanki.model.Wallet;
+import com.bank.yanki.repository.KnownCardRepository;
 import com.bank.yanki.repository.WalletRepository;
 import com.bank.yanki.service.WalletService;
 import io.reactivex.rxjava3.core.Completable;
@@ -24,6 +26,7 @@ import java.math.BigDecimal;
 public class WalletServiceImpl implements WalletService {
 
     private final WalletRepository repository;
+    private final KnownCardRepository knownCardRepository;
 
     @Override
     public Single<WalletDto> create(WalletDto dto) {
@@ -71,6 +74,33 @@ public class WalletServiceImpl implements WalletService {
             }
             return Completable.fromPublisher(repository.delete(wallet));
         });
+    }
+
+    @Override
+    public Single<WalletDto> linkCard(String phoneNumber, String cardNumber) {
+        log.info("Linking card {} to wallet {}", cardNumber, phoneNumber);
+        return findEntity(phoneNumber).flatMap(wallet ->
+                        Maybe.fromPublisher(knownCardRepository.findById(cardNumber))
+                                .switchIfEmpty(Single.<KnownCard>error(
+                                        new BusinessException("Debit card not found: " + cardNumber)))
+                                .flatMap(card -> {
+                                    if (!card.getCustomerDocument().equals(wallet.getDocumentNumber())) {
+                                        return Single.<Wallet>error(new BusinessException(
+                                                "The card does not belong to the wallet holder"));
+                                    }
+                                    wallet.setDebitCardNumber(cardNumber);
+                                    return Single.fromPublisher(repository.save(wallet));
+                                }))
+                .map(WalletMapper::toDto);
+    }
+
+    @Override
+    public Single<WalletDto> unlinkCard(String phoneNumber) {
+        log.info("Unlinking card from wallet {}", phoneNumber);
+        return findEntity(phoneNumber).flatMap(wallet -> {
+            wallet.setDebitCardNumber(null);
+            return Single.fromPublisher(repository.save(wallet));
+        }).map(WalletMapper::toDto);
     }
 
     private Single<Wallet> findEntity(String phoneNumber) {

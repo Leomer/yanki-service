@@ -4,7 +4,9 @@ import com.bank.yanki.dto.WalletDto;
 import com.bank.yanki.exception.BusinessException;
 import com.bank.yanki.exception.NotFoundException;
 import com.bank.yanki.model.DocumentType;
+import com.bank.yanki.model.KnownCard;
 import com.bank.yanki.model.Wallet;
+import com.bank.yanki.repository.KnownCardRepository;
 import com.bank.yanki.repository.WalletRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -27,6 +29,8 @@ class WalletServiceImplTest {
 
     @Mock
     private WalletRepository repository;
+    @Mock
+    private KnownCardRepository knownCardRepository;
 
     @InjectMocks
     private WalletServiceImpl service;
@@ -120,5 +124,53 @@ class WalletServiceImplTest {
 
         service.delete("987654321").test().assertComplete();
         verify(repository).delete(w);
+    }
+
+    private KnownCard card(String customer) {
+        return KnownCard.builder().cardNumber("DC1").customerDocument(customer)
+                .primaryAccount("ACC1").build();
+    }
+
+    @Test
+    void linkCardShouldAssociateWhenCardBelongsToTheHolder() {
+        when(repository.findByPhoneNumber("987654321")).thenReturn(Mono.just(wallet("0")));
+        when(knownCardRepository.findById("DC1")).thenReturn(Mono.just(card("12345678")));
+        when(repository.save(any(Wallet.class))).thenAnswer(i -> Mono.just(i.getArgument(0)));
+
+        service.linkCard("987654321", "DC1")
+                .test()
+                .assertValue(w -> "DC1".equals(w.getDebitCardNumber()))
+                .assertComplete();
+    }
+
+    @Test
+    void linkCardShouldFailWhenCardBelongsToAnotherPerson() {
+        when(repository.findByPhoneNumber("987654321")).thenReturn(Mono.just(wallet("0")));
+        when(knownCardRepository.findById("DC1")).thenReturn(Mono.just(card("99999999")));
+
+        service.linkCard("987654321", "DC1").test().assertError(BusinessException.class);
+        verify(repository, never()).save(any());
+    }
+
+    @Test
+    void linkCardShouldFailWhenCardIsUnknown() {
+        when(repository.findByPhoneNumber("987654321")).thenReturn(Mono.just(wallet("0")));
+        when(knownCardRepository.findById("X")).thenReturn(Mono.empty());
+
+        service.linkCard("987654321", "X").test().assertError(BusinessException.class);
+        verify(repository, never()).save(any());
+    }
+
+    @Test
+    void unlinkCardShouldClearTheCard() {
+        Wallet linked = wallet("0");
+        linked.setDebitCardNumber("DC1");
+        when(repository.findByPhoneNumber("987654321")).thenReturn(Mono.just(linked));
+        when(repository.save(any(Wallet.class))).thenAnswer(i -> Mono.just(i.getArgument(0)));
+
+        service.unlinkCard("987654321")
+                .test()
+                .assertValue(w -> w.getDebitCardNumber() == null)
+                .assertComplete();
     }
 }

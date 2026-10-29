@@ -1,5 +1,6 @@
 package com.bank.yanki.controller;
 
+import com.bank.yanki.dto.LinkCardRequest;
 import com.bank.yanki.dto.WalletDto;
 import com.bank.yanki.service.WalletService;
 import io.reactivex.rxjava3.core.Completable;
@@ -44,5 +45,16 @@ public class WalletController {
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public Completable delete(@PathVariable String phoneNumber) {
         return service.delete(phoneNumber);
+    }
+
+    @PutMapping("/{phoneNumber}/debit-card")
+    public Single<WalletDto> linkCard(@PathVariable String phoneNumber,
+                                      @Valid @RequestBody LinkCardRequest request) {
+        return service.linkCard(phoneNumber, request.getCardNumber());
+    }
+
+    @DeleteMapping("/{phoneNumber}/debit-card")
+    public Single<WalletDto> unlinkCard(@PathVariable String phoneNumber) {
+        return service.unlinkCard(phoneNumber);
     }
 }
